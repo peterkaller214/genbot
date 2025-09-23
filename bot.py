@@ -1,3 +1,75 @@
+import random
+def get_stock():
+    stock = {}
+    for acc_type in ACCOUNT_TYPES:
+        filename = f"accounts_{acc_type}.txt"
+        if not os.path.exists(filename):
+            stock[acc_type] = 0
+        else:
+            with open(filename, "r") as f:
+                stock[acc_type] = len([line for line in f if line.strip()])
+    return stock
+# /stock command
+@bot.tree.command(name="stock", description="Show stock for all account types.")
+async def stock_cmd(interaction: discord.Interaction):
+    stock = get_stock()
+    msg = "**Account Stock:**\n"
+    for acc_type, count in stock.items():
+        msg += f"{acc_type.capitalize()}: {count}\n"
+    await interaction.response.send_message(msg, ephemeral=True)
+# /gamble command (50/50 win/lose)
+@bot.tree.command(name="gamble", description="Gamble your credits (50/50 chance).")
+@app_commands.describe(amount="Amount of credits to gamble")
+async def gamble_cmd(interaction: discord.Interaction, amount: int):
+    user_id = str(interaction.user.id)
+    credits = load_credits()
+    user_credits = credits.get(user_id, 0)
+    if amount <= 0:
+        await interaction.response.send_message("Amount must be positive!", ephemeral=True)
+        return
+    if user_credits < amount:
+        await interaction.response.send_message(f"Not enough credits! You have {user_credits}.", ephemeral=True)
+        return
+    if random.random() < 0.5:
+        credits[user_id] -= amount
+        save_credits(credits)
+        await interaction.response.send_message(f"You lost {amount} credits! Remaining: {credits[user_id]}", ephemeral=True)
+    else:
+        credits[user_id] += amount
+        save_credits(credits)
+        await interaction.response.send_message(f"You won {amount} credits! Total: {credits[user_id]}", ephemeral=True)
+
+# /slots command (simple slot machine)
+@bot.tree.command(name="slots", description="Play the slot machine!")
+@app_commands.describe(amount="Amount of credits to bet")
+async def slots_cmd(interaction: discord.Interaction, amount: int):
+    user_id = str(interaction.user.id)
+    credits = load_credits()
+    user_credits = credits.get(user_id, 0)
+    if amount <= 0:
+        await interaction.response.send_message("Amount must be positive!", ephemeral=True)
+        return
+    if user_credits < amount:
+        await interaction.response.send_message(f"Not enough credits! You have {user_credits}.", ephemeral=True)
+        return
+    symbols = ["🍒", "🍋", "🔔", "⭐", "7️⃣"]
+    result = [random.choice(symbols) for _ in range(3)]
+    win = False
+    payout = 0
+    if result[0] == result[1] == result[2]:
+        win = True
+        payout = amount * 5
+    elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
+        win = True
+        payout = amount * 2
+    if win:
+        credits[user_id] += payout - amount
+        save_credits(credits)
+        await interaction.response.send_message(f"{' '.join(result)}\nYou won {payout} credits! Total: {credits[user_id]}", ephemeral=True)
+    else:
+        credits[user_id] -= amount
+        save_credits(credits)
+        await interaction.response.send_message(f"{' '.join(result)}\nYou lost {amount} credits! Remaining: {credits[user_id]}", ephemeral=True)
 import discord
 from discord import app_commands
 from discord.ext import commands
