@@ -18,8 +18,15 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def load_credits():
     if not os.path.exists(CREDITS_FILE):
         return {}
-    with open(CREDITS_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(CREDITS_FILE, "r") as f:
+            content = f.read().strip()
+            if not content:  # Check if file is empty
+                return {}
+            return json.loads(content)
+    except json.JSONDecodeError:
+        # If JSON is invalid, return an empty dictionary
+        return {}
 
 def save_credits(credits):
     with open(CREDITS_FILE, "w") as f:
