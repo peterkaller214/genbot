@@ -6,12 +6,14 @@ import os
 import random
 
 # Constants
-TOKEN = "MTQwMzU0OTc2MzQzNzA2ODMzOQ.GLXt9i.gUuUQTFUOx2zI2Kxr9pHbM5mcYtva7qi1SwpWM"
+TOKEN = "MTQwMzU0OTc2MzQzNzA2ODMzOQ.GLXt9i.gUuUQTFUOx2zI2Kxr9pHbM5mcYtva7qi1SwpWM"  # Besser in Umgebungsvariablen speichern
 CREDITS_FILE = "credits.json"
-ACCOUNT_TYPES = ["netflix", "spotify", "minecraft"]  # Add more types as needed
+ACCOUNT_TYPES = ["netflix", "spotify", "minecraft", "free"]  # Neuer Account-Typ "free" hinzugefügt
+RESTOCK_CHANNEL_ID = 123456789012345678  # Ersetze durch die tatsächliche Kanal-ID
 
 # Initialize bot
 intents = discord.Intents.default()
+intents.message_content = True  # Aktiviere message_content Intent, falls benötigt
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Utility functions
@@ -21,11 +23,10 @@ def load_credits():
     try:
         with open(CREDITS_FILE, "r") as f:
             content = f.read().strip()
-            if not content:  # Check if file is empty
+            if not content:
                 return {}
             return json.loads(content)
     except json.JSONDecodeError:
-        # If JSON is invalid, return an empty dictionary
         return {}
 
 def save_credits(credits):
@@ -55,6 +56,19 @@ def get_account(account_type):
     with open(filename, "w") as f:
         f.writelines(lines[1:])
     return account
+
+def add_account(account_type, account_data):
+    """Fügt einen Account zu einer Datei hinzu und gibt True zurück, wenn erfolgreich."""
+    if account_type not in ACCOUNT_TYPES:
+        return False
+    filename = f"accounts_{account_type}.txt"
+    try:
+        with open(filename, "a") as f:
+            f.write(account_data + "\n")
+        return True
+    except Exception as e:
+        print(f"Fehler beim Hinzufügen des Accounts zu {filename}: {e}")
+        return False
 
 # Bot commands
 @bot.event
@@ -128,7 +142,7 @@ async def slots_cmd(interaction: discord.Interaction, amount: int):
 
 @bot.tree.command(name="purchase", description="Purchase an account with credits.")
 @app_commands.describe(account_type="Type of account to purchase")
-@app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES])
+@app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES if acc_type != "free"])
 async def purchase(interaction: discord.Interaction, account_type: app_commands.Choice[str]):
     user_id = str(interaction.user.id)
     credits = load_credits()
@@ -144,6 +158,20 @@ async def purchase(interaction: discord.Interaction, account_type: app_commands.
     credits[user_id] = user_credits - price
     save_credits(credits)
     await interaction.response.send_message(f"Here is your {account_type.value} account: `{account}`. Remaining credits: {credits[user_id]}", ephemeral=True)
+
+@bot.tree.command(name="freeaccount", description="Get a free account.")
+@app_commands.describe(account_type="Type of account to get (free)")
+@app_commands.choices(account_type=[app_commands.Choice(name="Free", value="free")])
+@app_commands.checks.cooldown(1, 3600)  # 1 Nutzung pro Stunde
+async def freeaccount(interaction: discord.Interaction, account_type: app_commands.Choice[str]):
+    if account_type.value != "free":
+        await interaction.response.send_message("Only free accounts can be obtained with this command!", ephemeral=True)
+        return
+    account = get_account(account_type.value)
+    if not account:
+        await interaction.response.send_message("No free accounts available!", ephemeral=True)
+        return
+    await interaction.response.send_message(f"Here is your free {account_type.value} account: `{account}`", ephemeral=True)
 
 @bot.tree.command(name="credits", description="Show your current credits.")
 async def credits_cmd(interaction: discord.Interaction):
@@ -163,6 +191,36 @@ async def addcredits(interaction: discord.Interaction, user: discord.User, amoun
     credits[user_id] = credits.get(user_id, 0) + amount
     save_credits(credits)
     await interaction.response.send_message(f"Added {amount} credits to {user.mention}.", ephemeral=True)
+
+@bot.tree.command(name="restock", description="Restock an account (Admin only).")
+@app_commands.describe(
+    account_type="Type of account to restock",
+    account_data="Account details to add (e.g., username:password)"
+)
+@app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES])
+async def restock(interaction: discord.Interaction, account_type: app_commands.Choice[str], account_data: str):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Only admins can restock accounts!", ephemeral=True)
+        return
+    if not account_data.strip():
+        await interaction.response.send_message("Account data cannot be empty!", ephemeral=True)
+        return
+    if add_account(account_type.value, account_data):
+        # Send restock message to the specified channel
+        channel = bot.get_channel(RESTOCK_CHANNEL_ID)
+        if channel:
+            await channel.send(f"**Restock Alert!** A new {account_type.value.capitalize()} account has been added to the stock!")
+        await interaction.response.send_message(f"Successfully restocked {account_type.value} account: `{account_data}`", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Failed to restock {account_type.value} account. Invalid account type or error occurred.", ephemeral=True)
+
+# Fehlerhandler für Cooldown
+@bot.tree.error
+async def on_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        await interaction.response.send_message(f"Dieser Befehl hat einen Cooldown! Versuche es erneut in {int(error.retry_after)} Sekunden.", ephemeral=True)
+    else:
+        raise error
 
 # Run the bot
 if __name__ == "__main__":
