@@ -8,8 +8,8 @@ import random
 # Constants
 TOKEN = "MTQwMzU0OTc2MzQzNzA2ODMzOQ.GLXt9i.gUuUQTFUOx2zI2Kxr9pHbM5mcYtva7qi1SwpWM"  # Besser in Umgebungsvariablen speichern
 CREDITS_FILE = "credits.json"
-ACCOUNT_TYPES = ["netflix", "spotify", "minecraft", "free"]  # Neuer Account-Typ "free" hinzugefügt
-RESTOCK_CHANNEL_ID = 123456789012345678  # Ersetze durch die tatsächliche Kanal-ID
+ACCOUNT_TYPES = ["unbanned", "banned", "netflix", "spotify"]  # Angepasst zu deinen neuen Typen
+RESTOCK_CHANNEL_ID = 1417176018178801757  # Deine Kanal-ID
 
 # Initialize bot
 intents = discord.Intents.default()
@@ -142,7 +142,7 @@ async def slots_cmd(interaction: discord.Interaction, amount: int):
 
 @bot.tree.command(name="purchase", description="Purchase an account with credits.")
 @app_commands.describe(account_type="Type of account to purchase")
-@app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES if acc_type != "free"])
+@app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES])
 async def purchase(interaction: discord.Interaction, account_type: app_commands.Choice[str]):
     user_id = str(interaction.user.id)
     credits = load_credits()
@@ -159,17 +159,17 @@ async def purchase(interaction: discord.Interaction, account_type: app_commands.
     save_credits(credits)
     await interaction.response.send_message(f"Here is your {account_type.value} account: `{account}`. Remaining credits: {credits[user_id]}", ephemeral=True)
 
-@bot.tree.command(name="freeaccount", description="Get a free account.")
+@bot.tree.command(name="freeaccount", description="Get a Hypixel banned account.")
 @app_commands.describe(account_type="Type of account to get (free)")
-@app_commands.choices(account_type=[app_commands.Choice(name="Free", value="free")])
+@app_commands.choices(account_type=[app_commands.Choice(name="Banned", value="banned")])
 @app_commands.checks.cooldown(1, 3600)  # 1 Nutzung pro Stunde
 async def freeaccount(interaction: discord.Interaction, account_type: app_commands.Choice[str]):
-    if account_type.value != "free":
-        await interaction.response.send_message("Only free accounts can be obtained with this command!", ephemeral=True)
+    if account_type.value != "banned":
+        await interaction.response.send_message("Only banned accounts can be obtained with this command!", ephemeral=True)
         return
     account = get_account(account_type.value)
     if not account:
-        await interaction.response.send_message("No free accounts available!", ephemeral=True)
+        await interaction.response.send_message("No banned accounts available!", ephemeral=True)
         return
     await interaction.response.send_message(f"Here is your free {account_type.value} account: `{account}`", ephemeral=True)
 
@@ -199,26 +199,34 @@ async def addcredits(interaction: discord.Interaction, user: discord.User, amoun
 )
 @app_commands.choices(account_type=[app_commands.Choice(name=acc_type.capitalize(), value=acc_type) for acc_type in ACCOUNT_TYPES])
 async def restock(interaction: discord.Interaction, account_type: app_commands.Choice[str], account_data: str):
+    # Defer die Interaktion früh, um Acknowledgement-Probleme zu vermeiden
+    await interaction.response.defer(ephemeral=True)
+    
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Only admins can restock accounts!", ephemeral=True)
+        await interaction.followup.send("Only admins can restock accounts!", ephemeral=True)
         return
     if not account_data.strip():
-        await interaction.response.send_message("Account data cannot be empty!", ephemeral=True)
+        await interaction.followup.send("Account data cannot be empty!", ephemeral=True)
         return
     if add_account(account_type.value, account_data):
         # Send restock message to the specified channel
         channel = bot.get_channel(RESTOCK_CHANNEL_ID)
         if channel:
             await channel.send(f"**Restock Alert!** A new {account_type.value.capitalize()} account has been added to the stock!")
-        await interaction.response.send_message(f"Successfully restocked {account_type.value} account: `{account_data}`", ephemeral=True)
+        await interaction.followup.send(f"Successfully restocked {account_type.value} account: `{account_data}`", ephemeral=True)
     else:
-        await interaction.response.send_message(f"Failed to restock {account_type.value} account. Invalid account type or error occurred.", ephemeral=True)
+        await interaction.followup.send(f"Failed to restock {account_type.value} account. Invalid account type or error occurred.", ephemeral=True)
 
 # Fehlerhandler für Cooldown
 @bot.tree.error
 async def on_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.CommandOnCooldown):
-        await interaction.response.send_message(f"Dieser Befehl hat einen Cooldown! Versuche es erneut in {int(error.retry_after)} Sekunden.", ephemeral=True)
+        # Für Cooldown: Verwende followup, falls möglich (nach Defer), oder response falls nicht
+        if interaction.response.is_done():
+            # Wenn schon acknowledged, ignoriere oder logge
+            print(f"Cooldown error for {interaction.user}: {error}")
+        else:
+            await interaction.response.send_message(f"Dieser Befehl hat einen Cooldown! Versuche es erneut in {int(error.retry_after)} Sekunden.", ephemeral=True)
     else:
         raise error
 
