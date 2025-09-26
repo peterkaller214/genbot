@@ -8,8 +8,8 @@ import random
 # Constants
 TOKEN = "MTQwMzU0OTc2MzQzNzA2ODMzOQ.GLXt9i.gUuUQTFUOx2zI2Kxr9pHbM5mcYtva7qi1SwpWM"  # Besser in Umgebungsvariablen speichern
 CREDITS_FILE = "credits.json"
-ACCOUNT_TYPES = ["unbanned", "banned", "netflix", "spotify"]  # Neuer Account-Typ "free" hinzugefügt
-RESTOCK_CHANNEL_ID = 1417176018178801757  # Ersetze durch die tatsächliche Kanal-ID
+ACCOUNT_TYPES = ["netflix", "spotify", "minecraft", "free"]  # Neuer Account-Typ "free" hinzugefügt
+RESTOCK_CHANNEL_ID = 123456789012345678  # Ersetze durch die tatsächliche Kanal-ID
 
 # Initialize bot
 intents = discord.Intents.default()
@@ -159,17 +159,17 @@ async def purchase(interaction: discord.Interaction, account_type: app_commands.
     save_credits(credits)
     await interaction.response.send_message(f"Here is your {account_type.value} account: `{account}`. Remaining credits: {credits[user_id]}", ephemeral=True)
 
-@bot.tree.command(name="freeaccount", description="Get a Hypixel banned account.")
+@bot.tree.command(name="freeaccount", description="Get a free account.")
 @app_commands.describe(account_type="Type of account to get (free)")
-@app_commands.choices(account_type=[app_commands.Choice(name="Banned", value="banned")])
+@app_commands.choices(account_type=[app_commands.Choice(name="Free", value="free")])
 @app_commands.checks.cooldown(1, 3600)  # 1 Nutzung pro Stunde
 async def freeaccount(interaction: discord.Interaction, account_type: app_commands.Choice[str]):
-    if account_type.value != "banned":
-        await interaction.response.send_message("Only banned accounts can be obtained with this command!", ephemeral=True)
+    if account_type.value != "free":
+        await interaction.response.send_message("Only free accounts can be obtained with this command!", ephemeral=True)
         return
     account = get_account(account_type.value)
     if not account:
-        await interaction.response.send_message("No banned accounts available!", ephemeral=True)
+        await interaction.response.send_message("No free accounts available!", ephemeral=True)
         return
     await interaction.response.send_message(f"Here is your free {account_type.value} account: `{account}`", ephemeral=True)
 
